@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package eventpipe;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+message Event {
+  string event_id = 1;
+  string source = 2;
+  string event_type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  google.protobuf.Struct payload = 5;
+  map<string, string> metadata = 6;
+}
+
+message IngestResponse {
+  string event_id = 1;
+  string status = 2;
+}
+
+service EventService {
+  rpc Ingest(Event) returns (IngestResponse);
+  rpc IngestStream(stream Event) returns (IngestResponse);
+}
