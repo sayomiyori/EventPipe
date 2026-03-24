@@ -23,4 +23,4 @@ logs:
 	docker compose logs -f ingest_service
 
 test:
-	PYTHONPATH=$(CURDIR) python -m pytest ingest_service/tests -v
+	PYTHONPATH=$(CURDIR) python -m pytest -m "not integration" -v

@@ -43,7 +43,50 @@ services:
         set -e
         kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 \
           --topic events.raw --partitions 3 --replication-factor 1
-        echo "Topic events.raw ready."
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 \
+          --topic events.dlq --partitions 1 --replication-factor 1
+        echo "Kafka topics events.raw, events.dlq ready."
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eventpipe
+      POSTGRES_PASSWORD: eventpipe
+      POSTGRES_DB: eventpipe
+    ports:
+      - "5434:5434"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventpipe -d eventpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for i in $$(seq 1 40); do
+          mc alias set local http://minio:9000 minio minio12345 && break
+          sleep 2
+        done
+        mc mb --ignore-existing local/raw-events
+        echo "MinIO bucket raw-events ready."
     restart: "no"
 
   ingest_service:
@@ -65,3 +108,27 @@ services:
       EVENTPIPE_API_PORT: 8013
       EVENTPIPE_GRPC_HOST: 0.0.0.0
       EVENTPIPE_GRPC_PORT: 50051
+
+  transform_service:
+    build:
+      context: .
+      dockerfile: transform_service/Dockerfile
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      TRANSFORM_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TRANSFORM_KAFKA_TOPIC_RAW: events.raw
+      TRANSFORM_KAFKA_TOPIC_DLQ: events.dlq
+      TRANSFORM_KAFKA_GROUP_ID: transform-workers
+      TRANSFORM_DATABASE_URL: postgresql+asyncpg://eventpipe:eventpipe@postgres:5432/eventpipe
+      TRANSFORM_MINIO_ENDPOINT_URL: http://minio:9000
+      TRANSFORM_MINIO_ACCESS_KEY: minio
+      TRANSFORM_MINIO_SECRET_KEY: minio12345
+      TRANSFORM_MINIO_BUCKET_RAW: raw-events
