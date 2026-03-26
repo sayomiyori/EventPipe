@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(router, prefix="/api/v1")
     application.add_api_route("/metrics", lambda: metrics_response(), methods=["GET"])
+    application.add_api_route("/health", lambda: {"status": "ok"}, methods=["GET"])
     return application
 
 

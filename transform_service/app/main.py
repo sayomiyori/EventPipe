@@ -4,11 +4,11 @@ import signal
 import sys
 
 import structlog
-from prometheus_client import start_http_server
 
 from transform_service.app.config import get_settings
 from transform_service.app.consumer import run_consumer_loop
 from transform_service.app.db.session import create_engine, create_session_factory, init_db
+from transform_service.app.health_server import start_health_server
 from transform_service.app.storage.s3 import create_s3_session, ensure_bucket_exists
 
 
@@ -30,7 +30,7 @@ async def _async_main() -> None:
     log = structlog.get_logger("transform_main")
     configure_logging()
     settings = get_settings()
-    start_http_server(port=settings.metrics_port, addr=settings.metrics_host)
+    server = await start_health_server(settings.health_host, settings.health_port)
     engine = create_engine(settings)
     await init_db(engine)
     session_factory = create_session_factory(engine)
@@ -57,6 +57,8 @@ async def _async_main() -> None:
     try:
         await run_consumer_loop(settings, session_factory, stop_event)
     finally:
+        server.close()
+        await server.wait_closed()
         await engine.dispose()
         log.info("transform_stopped")
 

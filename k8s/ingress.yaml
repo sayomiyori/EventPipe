@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eventpipe
+  namespace: eventpipe
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/ingest
+            pathType: Prefix
+            backend:
+              service:
+                name: ingest-service
+                port:
+                  number: 8000
+          - path: /api/query
+            pathType: Prefix
+            backend:
+              service:
+                name: query-service
+                port:
+                  number: 8002

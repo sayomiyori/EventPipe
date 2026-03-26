@@ -53,8 +53,81 @@ PYTHONPATH=. python -m pytest ingest_service/tests -v
 eventpipe/
 ├── proto/                 # Protobuf
 ├── ingest_service/        # Ingest Service (FastAPI, gRPC, Kafka)
+├── transform_service/     # Transform Service (Kafka consumer, MinIO, Postgres)
+├── query_service/         # Query Service (FastAPI, Postgres, MinIO presigned URLs)
+├── monitoring/            # Prometheus + Grafana configs
+├── k8s/                   # Kubernetes manifests
 ├── docker-compose.yml
 └── Makefile
 ```
 
 Репозиторий: [github.com/sayomiyori/EventPipe](https://github.com/sayomiyori/EventPipe).
+
+## Kubernetes
+
+### Prerequisites
+
+- `kubectl`
+- `minikube`
+
+### Minikube: сборка образов (важно)
+
+Манифесты в `k8s/` используют локальные образы:
+
+- `eventpipe-ingest:latest`
+- `eventpipe-transform:latest`
+- `eventpipe-query:latest`
+
+Чтобы Kubernetes внутри Minikube их “видел”, соберите их **в Docker-демоне Minikube**.
+
+**PowerShell (Windows):**
+
+```powershell
+minikube start --memory=4096
+& minikube -p minikube docker-env --shell powershell | Invoke-Expression
+
+docker build -f ingest_service/Dockerfile -t eventpipe-ingest:latest .
+docker build -f transform_service/Dockerfile -t eventpipe-transform:latest .
+docker build -f query_service/Dockerfile -t eventpipe-query:latest .
+```
+
+**bash (Linux/macOS):**
+
+```bash
+minikube start --memory=4096
+eval "$(minikube docker-env)"
+
+docker build -f ingest_service/Dockerfile -t eventpipe-ingest:latest .
+docker build -f transform_service/Dockerfile -t eventpipe-transform:latest .
+docker build -f query_service/Dockerfile -t eventpipe-query:latest .
+```
+
+Если используете Ingress, включите аддон:
+
+```bash
+minikube addons enable ingress
+```
+
+### Quick start
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/ --recursive
+minikube service ingest-service -n eventpipe
+```
+
+### Проверка
+
+```bash
+kubectl get pods -n eventpipe
+```
+
+### Скейлинг
+
+```bash
+kubectl scale deployment transform --replicas=4 -n eventpipe
+```
+
+## Скриншоты
+
+Скриншоты для отчёта кладите в `docs/images/`.

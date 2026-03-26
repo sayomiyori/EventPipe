@@ -186,8 +186,22 @@ async def run_consumer_loop(
         key_serializer=lambda k: k if isinstance(k, bytes) else str(k).encode("utf-8"),
     )
     s3_session = create_s3_session()
-    await consumer.start()
-    await dlq_producer.start()
+
+    async def _start_with_retry(client, name: str, max_retries: int = 10, backoff_base: float = 2.0) -> None:
+        for attempt in range(max_retries):
+            try:
+                await client.start()
+                log.info("kafka_connected", client=name, attempt=attempt + 1)
+                return
+            except Exception as exc:
+                wait = backoff_base * (2 ** attempt)
+                log.warning("kafka_not_ready", client=name, attempt=attempt + 1, max_retries=max_retries, error=str(exc), retry_in=wait)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(wait)
+        raise RuntimeError(f"Could not connect {name} to Kafka after {max_retries} attempts")
+
+    await _start_with_retry(consumer, "consumer")
+    await _start_with_retry(dlq_producer, "dlq_producer")
     try:
         async with httpx.AsyncClient() as http_client:
             while not stop_event.is_set():

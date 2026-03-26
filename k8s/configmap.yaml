@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eventpipe-config
+  namespace: eventpipe
+data:
+  # Kafka
+  EVENTPIPE_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  EVENTPIPE_KAFKA_TOPIC_RAW: "events.raw"
+
+  TRANSFORM_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  TRANSFORM_KAFKA_TOPIC_RAW: "events.raw"
+  TRANSFORM_KAFKA_TOPIC_DLQ: "events.dlq"
+  TRANSFORM_KAFKA_GROUP_ID: "transform-workers"
+  TRANSFORM_MINIO_ENDPOINT_URL: "http://minio:9000"
+  TRANSFORM_MINIO_REGION: "us-east-1"
+  TRANSFORM_MINIO_BUCKET_RAW: "raw-events"
+  TRANSFORM_DATABASE_HOST: "postgres"
+  TRANSFORM_DATABASE_PORT: "5432"
+  TRANSFORM_DATABASE_NAME: "eventpipe"
+  TRANSFORM_DATABASE_USER: "eventpipe"
+  TRANSFORM_HEALTH_HOST: "0.0.0.0"
+  TRANSFORM_HEALTH_PORT: "9101"
+
+  QUERY_API_HOST: "0.0.0.0"
+  QUERY_API_PORT: "8002"
+  QUERY_DATABASE_HOST: "postgres"
+  QUERY_DATABASE_PORT: "5432"
+  QUERY_DATABASE_NAME: "eventpipe"
+  QUERY_DATABASE_USER: "eventpipe"
+  QUERY_MINIO_ENDPOINT_URL: "http://minio:9000"
+  QUERY_MINIO_PUBLIC_URL: "http://minio:9000"
+  QUERY_MINIO_REGION: "us-east-1"
+  QUERY_MINIO_BUCKET_RAW: "raw-events"
+  QUERY_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  QUERY_KAFKA_TOPIC_DLQ: "events.dlq"
+
+  # Ingest ports (inside cluster)
+  EVENTPIPE_API_HOST: "0.0.0.0"
+  EVENTPIPE_API_PORT: "8000"
+  EVENTPIPE_GRPC_HOST: "0.0.0.0"
+  EVENTPIPE_GRPC_PORT: "50051"
