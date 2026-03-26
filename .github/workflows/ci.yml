@@ -34,11 +34,10 @@ jobs:
         ports:
           - 5432:5432
       minio:
-        image: bitnami/minio:2024
+        image: minio/minio:latest
         env:
           MINIO_ROOT_USER: minio
           MINIO_ROOT_PASSWORD: minio12345
-          MINIO_DEFAULT_BUCKETS: raw-events
         ports:
           - 9000:9000
 
