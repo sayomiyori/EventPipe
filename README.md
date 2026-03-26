@@ -1,11 +1,13 @@
 # EventPipe
 
-[![CI](https://img.shields.io/github/actions/workflow/status/sayomiyori/EventPipe/ci.yml?branch=main&label=CI)](https://github.com/sayomiyori/EventPipe/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.12-blue)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-Minikube-326CE5?logo=kubernetes&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
-![Kafka](https://img.shields.io/badge/Kafka-Event%20Streaming-231F20?logo=apachekafka&logoColor=white)
+[![CI](https://github.com/sayomiyori/EventPipe/actions/workflows/ci.yml/badge.svg)](https://github.com/sayomiyori/EventPipe/actions)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](#)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](#)
+[![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)](#)
+[![gRPC](https://img.shields.io/badge/gRPC-4285F4?logo=google&logoColor=white)](#)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](#)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](#)
+[![MinIO](https://img.shields.io/badge/MinIO-C72E49?logo=minio&logoColor=white)](#)
 
 EventPipe — микросервисный ETL-пайплайн для обработки событий:
 
