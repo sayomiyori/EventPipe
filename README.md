@@ -1,5 +1,12 @@
 # EventPipe
 
+[![CI](https://img.shields.io/github/actions/workflow/status/sayomiyori/EventPipe/ci.yml?branch=main&label=CI)](https://github.com/sayomiyori/EventPipe/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Minikube-326CE5?logo=kubernetes&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
+![Kafka](https://img.shields.io/badge/Kafka-Event%20Streaming-231F20?logo=apachekafka&logoColor=white)
+
 EventPipe — микросервисный ETL-пайплайн для обработки событий:
 
 - **Ingest Service**: принимает события по REST/gRPC и пишет в Kafka.
