@@ -4,6 +4,7 @@ import signal
 import sys
 
 import structlog
+from prometheus_client import start_http_server
 
 from transform_service.app.config import get_settings
 from transform_service.app.consumer import run_consumer_loop
@@ -29,6 +30,7 @@ async def _async_main() -> None:
     log = structlog.get_logger("transform_main")
     configure_logging()
     settings = get_settings()
+    start_http_server(port=settings.metrics_port, addr=settings.metrics_host)
     engine = create_engine(settings)
     await init_db(engine)
     session_factory = create_session_factory(engine)

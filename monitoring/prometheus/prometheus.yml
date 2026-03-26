@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: ingest_service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ingest_service:8013"]
+
+  - job_name: transform_service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["transform_service:9101"]
+
+  - job_name: query_service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["query_service:8020"]

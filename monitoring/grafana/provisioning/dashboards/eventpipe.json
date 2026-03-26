@@ -1,0 +1,137 @@
+{
+  "title": "EventPipe Overview",
+  "uid": "eventpipe-overview",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Events Ingested (total)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(events_ingested_total)",
+          "legendFormat": "total",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 2,
+      "title": "Ingest Rate (events/s)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(events_ingested_total[1m]))",
+          "legendFormat": "rate",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 3,
+      "title": "Transform Processed (total)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "events_processed_total",
+          "legendFormat": "processed",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 4,
+      "title": "Active Queries",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "active_queries",
+          "legendFormat": "active",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 5,
+      "title": "Events Ingested Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(events_ingested_total[1m]))",
+          "legendFormat": "ingest rate",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 6,
+      "title": "Query Duration",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(query_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(query_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 7,
+      "title": "Transform: Processed vs Failed",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(events_processed_total[1m])",
+          "legendFormat": "processed/s",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        },
+        {
+          "expr": "rate(events_failed_total[1m])",
+          "legendFormat": "failed/s",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    },
+    {
+      "id": 8,
+      "title": "Ingest Duration (p99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(ingest_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(ingest_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50",
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" }
+    }
+  ]
+}

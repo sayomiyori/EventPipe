@@ -10,6 +10,7 @@ from ingest_service.app.api.events import router
 from ingest_service.app.config import get_settings
 from ingest_service.app.grpc_server.server import serve_grpc
 from ingest_service.app.kafka.producer import EventKafkaProducer
+from ingest_service.app.metrics import metrics_response
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     application.include_router(router, prefix="/api/v1")
+    application.add_api_route("/metrics", lambda: metrics_response(), methods=["GET"])
     return application
 
 

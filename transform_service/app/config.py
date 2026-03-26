@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     retry_backoff_base_seconds: float = 0.5
 
     geo_ip_timeout_seconds: float = 2.0
+    metrics_host: str = "0.0.0.0"
+    metrics_port: int = 9101
 
 
 @lru_cache

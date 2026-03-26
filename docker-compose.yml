@@ -55,7 +55,7 @@ services:
       POSTGRES_PASSWORD: eventpipe
       POSTGRES_DB: eventpipe
     ports:
-      - "5434:5434"
+      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U eventpipe -d eventpipe"]
       interval: 5s
@@ -108,6 +108,8 @@ services:
       EVENTPIPE_API_PORT: 8013
       EVENTPIPE_GRPC_HOST: 0.0.0.0
       EVENTPIPE_GRPC_PORT: 50051
+    labels:
+      - "prometheus.job=ingest_service"
 
   transform_service:
     build:
@@ -132,3 +134,53 @@ services:
       TRANSFORM_MINIO_ACCESS_KEY: minio
       TRANSFORM_MINIO_SECRET_KEY: minio12345
       TRANSFORM_MINIO_BUCKET_RAW: raw-events
+      TRANSFORM_METRICS_HOST: 0.0.0.0
+      TRANSFORM_METRICS_PORT: 9101
+    ports:
+      - "9101:9101"
+
+  query_service:
+    build:
+      context: .
+      dockerfile: query_service/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8020:8020"
+    environment:
+      QUERY_API_HOST: 0.0.0.0
+      QUERY_API_PORT: 8020
+      QUERY_DATABASE_URL: postgresql+asyncpg://eventpipe:eventpipe@postgres:5432/eventpipe
+      QUERY_MINIO_ENDPOINT_URL: http://minio:9000
+      QUERY_MINIO_PUBLIC_URL: http://localhost:9000
+      QUERY_MINIO_ACCESS_KEY: minio
+      QUERY_MINIO_SECRET_KEY: minio12345
+      QUERY_MINIO_BUCKET_RAW: raw-events
+      QUERY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      QUERY_KAFKA_TOPIC_DLQ: events.dlq
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9095:9090"
+    depends_on:
+      - ingest_service
+      - transform_service
+      - query_service
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus

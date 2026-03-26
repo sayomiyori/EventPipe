@@ -1,0 +1,90 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    services:
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.5.0
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+      kafka:
+        image: confluentinc/cp-kafka:7.5.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: eventpipe
+          POSTGRES_PASSWORD: eventpipe
+          POSTGRES_DB: eventpipe
+        ports:
+          - 5432:5432
+      minio:
+        image: bitnami/minio:2024
+        env:
+          MINIO_ROOT_USER: minio
+          MINIO_ROOT_PASSWORD: minio12345
+          MINIO_DEFAULT_BUCKETS: raw-events
+        ports:
+          - 9000:9000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          pip install -r ingest_service/requirements.txt
+          pip install -r transform_service/requirements.txt
+          pip install -r query_service/requirements.txt
+
+      - name: Lint
+        run: ruff check ingest_service transform_service query_service
+
+      - name: Wait for Kafka
+        run: |
+          python - <<'PY'
+          import socket, time
+          for _ in range(60):
+              s = socket.socket()
+              try:
+                  s.connect(("127.0.0.1", 9092))
+                  print("kafka ready")
+                  break
+              except OSError:
+                  time.sleep(2)
+              finally:
+                  s.close()
+          else:
+              raise SystemExit("kafka not ready")
+          PY
+
+      - name: Test
+        env:
+          PYTHONPATH: .
+        run: pytest -m "not integration" -v
+
+      - name: Docker build
+        run: |
+          docker build -f ingest_service/Dockerfile .
+          docker build -f transform_service/Dockerfile .
+          docker build -f query_service/Dockerfile .

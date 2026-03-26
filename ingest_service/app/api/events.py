@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 
 from ingest_service.app.kafka.producer import EventKafkaProducer
+from ingest_service.app.metrics import events_ingested_total, ingest_duration_seconds
 from ingest_service.app.schemas.event import (
     BatchEventIngest,
     BatchEventIngestResponse,
@@ -47,17 +48,19 @@ def _kafka_body(
 
 @router.post("/events", response_model=EventIngestResponse)
 async def ingest_event(body: EventIngest, producer: ProducerDep) -> EventIngestResponse:
-    event_id = producer.new_event_id()
-    await producer.publish_raw_event(
-        event_type=body.event_type,
-        body=_kafka_body(
-            event_id=event_id,
-            source=body.source,
+    with ingest_duration_seconds.time():
+        event_id = producer.new_event_id()
+        await producer.publish_raw_event(
             event_type=body.event_type,
-            payload=body.payload,
-            metadata=body.metadata,
-        ),
-    )
+            body=_kafka_body(
+                event_id=event_id,
+                source=body.source,
+                event_type=body.event_type,
+                payload=body.payload,
+                metadata=body.metadata,
+            ),
+        )
+    events_ingested_total.labels(source=body.source, event_type=body.event_type).inc()
     return EventIngestResponse(event_id=UUID(event_id))
 
 
@@ -67,17 +70,19 @@ async def ingest_events_batch(
     producer: ProducerDep,
 ) -> BatchEventIngestResponse:
     ids: list[UUID] = []
-    for ev in body.events:
-        event_id = producer.new_event_id()
-        await producer.publish_raw_event(
-            event_type=ev.event_type,
-            body=_kafka_body(
-                event_id=event_id,
-                source=ev.source,
+    with ingest_duration_seconds.time():
+        for ev in body.events:
+            event_id = producer.new_event_id()
+            await producer.publish_raw_event(
                 event_type=ev.event_type,
-                payload=ev.payload,
-                metadata=ev.metadata,
-            ),
-        )
-        ids.append(UUID(event_id))
+                body=_kafka_body(
+                    event_id=event_id,
+                    source=ev.source,
+                    event_type=ev.event_type,
+                    payload=ev.payload,
+                    metadata=ev.metadata,
+                ),
+            )
+            events_ingested_total.labels(source=ev.source, event_type=ev.event_type).inc()
+            ids.append(UUID(event_id))
     return BatchEventIngestResponse(count=len(ids), event_ids=ids)

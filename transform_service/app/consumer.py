@@ -11,6 +11,13 @@ from aiokafka.structs import OffsetAndMetadata, TopicPartition
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from transform_service.app.config import Settings
+from transform_service.app.metrics import (
+    events_failed_total,
+    events_processed_total,
+    kafka_consumer_lag,
+    s3_upload_duration_seconds,
+    transform_duration_seconds,
+)
 from transform_service.app.pipeline.pipeline import run_pipeline
 from transform_service.app.storage.postgres import save_processed_event
 from transform_service.app.storage.s3 import create_s3_session, upload_raw_json
@@ -25,10 +32,6 @@ def _parse_date_prefix(timestamp: str) -> str:
         return dt.strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         return "unknown-date"
-
-
-def _json_dumps(obj: Any) -> bytes:
-    return json.dumps(obj, default=str).encode("utf-8")
 
 
 async def _with_retries(
@@ -108,32 +111,34 @@ async def process_kafka_message(
     event_id = str(raw_dict.get("event_id", "unknown"))
 
     async def _once() -> None:
-        normalized, enrichments = await run_pipeline(
-            raw_dict,
-            settings=settings,
-            http_client=http_client,
-        )
-        ts = str(raw_dict.get("timestamp", ""))
-        date_prefix = _parse_date_prefix(ts)
-        eid = normalized["event_id"]
-        s3_key = f"{date_prefix}/{eid}.json"
-        await upload_raw_json(
-            s3_session,
-            settings,
-            key=s3_key,
-            body=raw_text.encode("utf-8"),
-        )
-        async with session_factory() as session:
-            await save_processed_event(
-                session,
-                event_id=eid,
-                source=normalized["source"],
-                event_type=normalized["event_type"],
-                payload=normalized.get("payload") or {},
-                metadata=normalized.get("metadata") or {},
-                s3_key=s3_key,
-                enrichments=enrichments,
+        with transform_duration_seconds.time():
+            normalized, enrichments = await run_pipeline(
+                raw_dict,
+                settings=settings,
+                http_client=http_client,
             )
+            ts = str(raw_dict.get("timestamp", ""))
+            date_prefix = _parse_date_prefix(ts)
+            eid = normalized["event_id"]
+            s3_key = f"{date_prefix}/{eid}.json"
+            with s3_upload_duration_seconds.time():
+                await upload_raw_json(
+                    s3_session,
+                    settings,
+                    key=s3_key,
+                    body=raw_text.encode("utf-8"),
+                )
+            async with session_factory() as session:
+                await save_processed_event(
+                    session,
+                    event_id=eid,
+                    source=normalized["source"],
+                    event_type=normalized["event_type"],
+                    payload=normalized.get("payload") or {},
+                    metadata=normalized.get("metadata") or {},
+                    s3_key=s3_key,
+                    enrichments=enrichments,
+                )
 
     try:
         await _with_retries(
@@ -143,7 +148,9 @@ async def process_kafka_message(
             log=log,
             event_id=event_id,
         )
+        events_processed_total.inc()
     except Exception as exc:  # noqa: BLE001
+        events_failed_total.inc()
         log.exception("transform_failed", event_id=event_id, error=str(exc))
         await publish_dlq(
             dlq_producer,
@@ -189,6 +196,8 @@ async def run_consumer_loop(
                     break
                 for _tp, messages in result.items():
                     for msg in messages:
+                        lag = max(0, (consumer.highwater(_tp) or 0) - msg.offset - 1)
+                        kafka_consumer_lag.set(lag)
                         try:
                             await process_kafka_message(
                                 msg,
