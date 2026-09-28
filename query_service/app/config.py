@@ -11,12 +11,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://eventpipe:eventpipe@localhost:5434/eventpipe"
 
-    minio_endpoint_url: str = "http://localhost:9000"
-    minio_public_url: str = "http://localhost:9000"
-    minio_access_key: str = "minio"
-    minio_secret_key: str = "minio12345"
-    minio_bucket_raw: str = "raw-events"
-    minio_region: str = "us-east-1"
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_public_url: str = "http://localhost:9000"
+    s3_access_key: str = "minio"
+    s3_secret_key: str = "minio12345"
+    s3_bucket_raw: str = "raw-events"
+    s3_region: str = "us-east-1"
 
     kafka_bootstrap_servers: str = "localhost:29092"
     kafka_topic_dlq: str = "events.dlq"

@@ -63,30 +63,48 @@ services:
       retries: 10
       start_period: 10s
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio12345
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.75
+    command: server -dir=/data -s3 -filer -ip=seaweedfs
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9333:9333" #Master
+      - "8333:8333" #S3 API
+      - "8888:8888" #Filer
+      - "8081:8080" #Volume server
+    environment:
+      - AWS_ACCESS_KEY_ID=some_key
+      - AWS_SECRET_ACCESS_KEY=some_secret
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8333/s3/api/v1/buckets/raw-events"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  minio-init:
-    image: minio/mc:latest
+  seaweedfs-init:
+    image: python:3.11-alpine
     depends_on:
-      - minio
+      - seaweedfs
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        set -e
-        for i in $$(seq 1 40); do
-          mc alias set local http://minio:9000 minio minio12345 && break
-          sleep 2
-        done
-        mc mb --ignore-existing local/raw-events
-        echo "MinIO bucket raw-events ready."
+        pip install boto3 --quiet
+        python -c "
+        import boto3, time, urllib.request
+        print('Waiting for SeaweedFS S3 service to start...')
+        while True:
+            try:
+                urllib.request.urlopen('http://seaweedfs:8333')
+                break
+            except:
+                time.sleep(2)
+        s3 = boto3.client('s3', endpoint_url='http://seaweedfs:8333', aws_access_key_id='some_key', aws_secret_access_key='some_secret', region_name='us-east-1')
+        try:
+            s3.create_bucket(Bucket='raw-events')
+            print('Bucket raw-events created successfully!')
+        except Exception as e:
+            pass
+        "
     restart: "no"
 
   ingest_service:
@@ -122,7 +140,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      minio-init:
+      seaweedfs-init:
         condition: service_completed_successfully
     environment:
       TRANSFORM_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -130,10 +148,11 @@ services:
       TRANSFORM_KAFKA_TOPIC_DLQ: events.dlq
       TRANSFORM_KAFKA_GROUP_ID: transform-workers
       TRANSFORM_DATABASE_URL: postgresql+asyncpg://eventpipe:eventpipe@postgres:5432/eventpipe
-      TRANSFORM_MINIO_ENDPOINT_URL: http://minio:9000
-      TRANSFORM_MINIO_ACCESS_KEY: minio
-      TRANSFORM_MINIO_SECRET_KEY: minio12345
-      TRANSFORM_MINIO_BUCKET_RAW: raw-events
+      TRANSFORM_S3_ENDPOINT_URL: http://seaweedfs:8333
+      TRANSFORM_S3_ACCESS_KEY: some_key
+      TRANSFORM_S3_SECRET_KEY: some_secret
+      TRANSFORM_S3_BUCKET_RAW: raw-events
+      TRANSFORM_S3_REGION: us-east-1
       TRANSFORM_HEALTH_HOST: 0.0.0.0
       TRANSFORM_HEALTH_PORT: 9101
     ports:
@@ -146,7 +165,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio-init:
+      seaweedfs-init:
         condition: service_completed_successfully
       kafka:
         condition: service_healthy
@@ -156,11 +175,12 @@ services:
       QUERY_API_HOST: 0.0.0.0
       QUERY_API_PORT: 8020
       QUERY_DATABASE_URL: postgresql+asyncpg://eventpipe:eventpipe@postgres:5432/eventpipe
-      QUERY_MINIO_ENDPOINT_URL: http://minio:9000
-      QUERY_MINIO_PUBLIC_URL: http://localhost:9000
-      QUERY_MINIO_ACCESS_KEY: minio
-      QUERY_MINIO_SECRET_KEY: minio12345
-      QUERY_MINIO_BUCKET_RAW: raw-events
+      QUERY_S3_ENDPOINT_URL: http://seaweedfs:8333
+      QUERY_S3_PUBLIC_URL: http://localhost:8333
+      QUERY_S3_ACCESS_KEY: some_key
+      QUERY_S3_SECRET_KEY: some_secret
+      QUERY_S3_BUCKET_RAW: raw-events
+      QUERY_S3_REGION: us-east-1
       QUERY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       QUERY_KAFKA_TOPIC_DLQ: events.dlq
 

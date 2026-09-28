@@ -24,10 +24,10 @@ def _payload_preview(payload: dict[str, Any], limit: int = 200) -> str:
 
 def _s3_client_kwargs(settings: Settings) -> dict[str, Any]:
     return {
-        "endpoint_url": settings.minio_endpoint_url,
-        "aws_access_key_id": settings.minio_access_key,
-        "aws_secret_access_key": settings.minio_secret_key,
-        "region_name": settings.minio_region,
+        "endpoint_url": settings.s3_endpoint_url,
+        "aws_access_key_id": settings.s3_access_key,
+        "aws_secret_access_key": settings.s3_secret_key,
+        "region_name": settings.s3_region,
         "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
     }
 
@@ -109,11 +109,11 @@ async def get_event_raw(event_id: str, session: AsyncSession = SessionDep, setti
     async with aioboto3.Session().client("s3", **_s3_client_kwargs(settings)) as client:
         presigned = await client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": settings.minio_bucket_raw, "Key": row.s3_key},
+            Params={"Bucket": settings.s3_bucket_raw, "Key": row.s3_key},
             ExpiresIn=15 * 60,
         )
     # Replace internal Docker hostname with public URL accessible from the browser
-    presigned = presigned.replace(settings.minio_endpoint_url, settings.minio_public_url, 1)
+    presigned = presigned.replace(settings.s3_endpoint_url, settings.s3_public_url, 1)
     return RedirectResponse(url=presigned, status_code=307)
 
 

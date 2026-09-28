@@ -17,11 +17,11 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://eventpipe:eventpipe@localhost:5432/eventpipe"
 
-    minio_endpoint_url: str = "http://localhost:9000"
-    minio_access_key: str = "minio"
-    minio_secret_key: str = "minio12345"
-    minio_bucket_raw: str = "raw-events"
-    minio_region: str = "us-east-1"
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_access_key: str = "minio"
+    s3_secret_key: str = "minio12345"
+    s3_bucket_raw: str = "raw-events"
+    s3_region: str = "us-east-1"
 
     max_retries: int = 3
     retry_backoff_base_seconds: float = 0.5
