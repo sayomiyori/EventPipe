@@ -11,7 +11,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](#)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](#)
 
-Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (validate/enrich/normalize) → PostgreSQL + MinIO (S3)**, with Query API, Dead Letter Queue, Prometheus/Grafana monitoring, Docker Compose, and Kubernetes manifests.
+Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (validate/enrich/normalize) → PostgreSQL + SeaweedFS (S3-compatible, Apache 2.0)**, with Query API, Dead Letter Queue, Prometheus/Grafana monitoring, Docker Compose, and Kubernetes manifests.
 
 ## Architecture
 
