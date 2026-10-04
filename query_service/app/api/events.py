@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import aioboto3
 from aiokafka import AIOKafkaConsumer
@@ -47,8 +47,8 @@ SettingsDep = Depends(get_settings)
 async def list_events(
     source: str | None = None,
     event_type: str | None = None,
-    from_dt: datetime | None = Query(None, alias="from"),
-    to_dt: datetime | None = Query(None, alias="to"),
+    from_dt: Annotated[datetime | None, Query(alias="from")] = None,
+    to_dt: Annotated[datetime | None, Query(alias="to")] = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
     session: AsyncSession = SessionDep,
@@ -106,14 +106,15 @@ async def get_event_raw(event_id: str, session: AsyncSession = SessionDep, setti
     if not row:
         raise HTTPException(status_code=404, detail="event not found")
 
-    async with aioboto3.Session().client("s3", **_s3_client_kwargs(settings)) as client:
+    kwargs = _s3_client_kwargs(settings)
+    # SigV4 authenticates Host, so sign for the public endpoint before returning the URL.
+    kwargs["endpoint_url"] = settings.s3_public_url
+    async with aioboto3.Session().client("s3", **kwargs) as client:
         presigned = await client.generate_presigned_url(
             "get_object",
             Params={"Bucket": settings.s3_bucket_raw, "Key": row.s3_key},
             ExpiresIn=15 * 60,
         )
-    # Replace internal Docker hostname with public URL accessible from the browser
-    presigned = presigned.replace(settings.s3_endpoint_url, settings.s3_public_url, 1)
     return RedirectResponse(url=presigned, status_code=307)
 
 

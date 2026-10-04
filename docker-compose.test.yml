@@ -1,0 +1,105 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    ports: ["127.0.0.1:59092:29092"]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:59092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka: {condition: service_healthy}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic events.raw --partitions 3 --replication-factor 1
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic events.dlq --partitions 1 --replication-factor 1
+  postgres:
+    image: postgres:16-alpine
+    ports: ["127.0.0.1:55435:5432"]
+    environment:
+      POSTGRES_USER: eventpipe
+      POSTGRES_PASSWORD: local-test-only
+      POSTGRES_DB: eventpipe_test
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventpipe -d eventpipe_test"]
+      interval: 3s
+      retries: 20
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.75
+    command: server -dir=/data -s3 -filer -ip=seaweedfs
+    ports: ["127.0.0.1:39000:8333"]
+    environment:
+      AWS_ACCESS_KEY_ID: verification
+      AWS_SECRET_ACCESS_KEY: local-test-only
+    volumes: ["s3_data:/data"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://seaweedfs:9333/cluster/status"]
+      interval: 3s
+      retries: 20
+  ingest:
+    build: {context: ., dockerfile: ingest_service/Dockerfile}
+    ports: ["127.0.0.1:38083:8013", "127.0.0.1:55083:50051"]
+    environment:
+      EVENTPIPE_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EVENTPIPE_API_PORT: 8013
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8013/health')"]
+      interval: 3s
+      retries: 20
+  transform:
+    build: {context: ., dockerfile: transform_service/Dockerfile}
+    environment:
+      TRANSFORM_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TRANSFORM_DATABASE_URL: postgresql+asyncpg://eventpipe:local-test-only@postgres:5432/eventpipe_test
+      TRANSFORM_S3_ENDPOINT_URL: http://seaweedfs:8333
+      TRANSFORM_S3_ACCESS_KEY: verification
+      TRANSFORM_S3_SECRET_KEY: local-test-only
+    depends_on:
+      kafka-init: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      seaweedfs: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9101/health')"]
+      interval: 3s
+      retries: 20
+  query:
+    build: {context: ., dockerfile: query_service/Dockerfile}
+    ports: ["127.0.0.1:38085:8020"]
+    environment:
+      QUERY_DATABASE_URL: postgresql+asyncpg://eventpipe:local-test-only@postgres:5432/eventpipe_test
+      QUERY_S3_ENDPOINT_URL: http://seaweedfs:8333
+      QUERY_S3_PUBLIC_URL: http://127.0.0.1:39000
+      QUERY_S3_ACCESS_KEY: verification
+      QUERY_S3_SECRET_KEY: local-test-only
+      QUERY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      transform: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8020/health')"]
+      interval: 3s
+      retries: 20
+volumes:
+  postgres_data:
+  s3_data:

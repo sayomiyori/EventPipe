@@ -21,10 +21,10 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
 
     def s3_kwargs(settings: Settings) -> dict:
         return {
-            "endpoint_url": settings.minio_endpoint_url,
-            "aws_access_key_id": settings.minio_access_key,
-            "aws_secret_access_key": settings.minio_secret_key,
-            "region_name": settings.minio_region,
+            "endpoint_url": settings.s3_endpoint_url,
+            "aws_access_key_id": settings.s3_access_key,
+            "aws_secret_access_key": settings.s3_secret_key,
+            "region_name": settings.s3_region,
             "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
         }
 
@@ -37,10 +37,10 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
             "TRANSFORM_DATABASE_URL",
             "postgresql+asyncpg://eventpipe:eventpipe@localhost:5432/eventpipe",
         ),
-        minio_endpoint_url=os.environ.get("TRANSFORM_MINIO_ENDPOINT_URL", "http://localhost:9000"),
-        minio_access_key=os.environ.get("TRANSFORM_MINIO_ACCESS_KEY", "minio"),
-        minio_secret_key=os.environ.get("TRANSFORM_MINIO_SECRET_KEY", "minio12345"),
-        minio_bucket_raw="raw-events",
+        s3_endpoint_url=os.environ.get("TRANSFORM_S3_ENDPOINT_URL", "http://localhost:9000"),
+        s3_access_key=os.environ.get("TRANSFORM_S3_ACCESS_KEY", "minio"),
+        s3_secret_key=os.environ.get("TRANSFORM_S3_SECRET_KEY", "minio12345"),
+        s3_bucket_raw="raw-events",
         max_retries=3,
     )
 
@@ -86,7 +86,7 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
     msg = None
     for _ in range(60):
         batch = await consumer.getmany(timeout_ms=2000, max_records=20)
-        for _tp, messages in batch.items():
+        for messages in batch.values():
             for m in messages:
                 try:
                     data = json.loads(m.value.decode("utf-8"))
@@ -139,6 +139,6 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
     assert row.s3_key.endswith(f"{event_id}.json")
 
     async with s3_session.client("s3", **s3_kwargs(settings)) as client:
-        obj = await client.get_object(Bucket=settings.minio_bucket_raw, Key=row.s3_key)
+        obj = await client.get_object(Bucket=settings.s3_bucket_raw, Key=row.s3_key)
         raw_read = await obj["Body"].read()
     assert json.loads(raw_read.decode())["event_id"] == event_id

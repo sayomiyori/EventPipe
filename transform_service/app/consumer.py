@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aioboto3
@@ -28,7 +28,7 @@ def _parse_date_prefix(timestamp: str) -> str:
         raw = (timestamp or "").strip()
         if raw.endswith("Z"):
             raw = raw[:-1] + "+00:00"
-        dt = datetime.fromisoformat(raw).astimezone(timezone.utc)
+        dt = datetime.fromisoformat(raw).astimezone(UTC)
         return dt.strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         return "unknown-date"
@@ -93,11 +93,16 @@ async def process_kafka_message(
     log: structlog.stdlib.BoundLogger,
 ) -> None:
     raw_bytes = msg.value
-    raw_text = raw_bytes.decode("utf-8") if isinstance(raw_bytes, (bytes, bytearray)) else str(raw_bytes)
-    kafka_key = msg.key.decode("utf-8") if msg.key else None
+    raw_text = raw_bytes.decode("utf-8", errors="replace") if isinstance(raw_bytes, (bytes, bytearray)) else str(raw_bytes)
+    kafka_key = msg.key.decode("utf-8", errors="replace") if msg.key else None
     try:
+        if isinstance(raw_bytes, (bytes, bytearray)):
+            raw_text = raw_bytes.decode("utf-8")
         raw_dict = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
+        if not isinstance(raw_dict, dict):
+            raise TypeError("event must be a JSON object")
+    except (UnicodeDecodeError, ValueError, TypeError) as exc:
+        events_failed_total.inc()
         log.error("invalid_json", error=str(exc))
         await publish_dlq(
             dlq_producer,
@@ -149,7 +154,7 @@ async def process_kafka_message(
             event_id=event_id,
         )
         events_processed_total.inc()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         events_failed_total.inc()
         log.exception("transform_failed", event_id=event_id, error=str(exc))
         await publish_dlq(
@@ -212,18 +217,17 @@ async def run_consumer_loop(
                     for msg in messages:
                         lag = max(0, (consumer.highwater(_tp) or 0) - msg.offset - 1)
                         kafka_consumer_lag.set(lag)
-                        try:
-                            await process_kafka_message(
-                                msg,
-                                settings=settings,
-                                session_factory=session_factory,
-                                s3_session=s3_session,
-                                http_client=http_client,
-                                dlq_producer=dlq_producer,
-                                log=log,
-                            )
-                        finally:
-                            await commit_message(consumer, msg)
+                        await process_kafka_message(
+                            msg,
+                            settings=settings,
+                            session_factory=session_factory,
+                            s3_session=s3_session,
+                            http_client=http_client,
+                            dlq_producer=dlq_producer,
+                            log=log,
+                        )
+                        # A failed DLQ delivery must leave the source event available for replay.
+                        await commit_message(consumer, msg)
     finally:
         await dlq_producer.stop()
         await consumer.stop()
