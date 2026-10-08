@@ -7,6 +7,7 @@ import aioboto3
 import httpx
 import structlog
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka.errors import KafkaError
 from aiokafka.structs import OffsetAndMetadata, TopicPartition
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -198,7 +199,7 @@ async def run_consumer_loop(
                 await client.start()
                 log.info("kafka_connected", client=name, attempt=attempt + 1)
                 return
-            except Exception as exc:
+            except (KafkaError, OSError, TimeoutError) as exc:
                 wait = backoff_base * (2 ** attempt)
                 log.warning("kafka_not_ready", client=name, attempt=attempt + 1, max_retries=max_retries, error=str(exc), retry_in=wait)
                 if attempt < max_retries - 1:

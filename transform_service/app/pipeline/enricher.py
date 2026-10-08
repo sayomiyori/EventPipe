@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -22,8 +22,8 @@ def _parse_timestamp(ts: str) -> datetime:
         raw = raw[:-1] + "+00:00"
     dt = datetime.fromisoformat(raw)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 async def lookup_geo_ip(

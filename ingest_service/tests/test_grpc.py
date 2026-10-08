@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import grpc
 import pytest
@@ -23,7 +23,7 @@ async def test_grpc_ingest() -> None:
         channel = grpc.aio.insecure_channel(f"127.0.0.1:{bound_port}")
         stub = event_pb2_grpc.EventServiceStub(channel)
         ts = timestamp_pb2.Timestamp()
-        ts.FromDatetime(datetime(2024, 1, 1, tzinfo=timezone.utc))
+        ts.FromDatetime(datetime(2024, 1, 1, tzinfo=UTC))
         st = struct_pb2.Struct()
         st.update({"k": "v"})
         req = event_pb2.Event(

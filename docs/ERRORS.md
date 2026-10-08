@@ -1,5 +1,19 @@
 # Verified defects — 2026-10-03
 
+## 2026-10-09: Startup and current checks
+
+- Main Compose SeaweedFS healthcheck invoked unavailable curl against a 404
+  route. Use the image's wget on `http://127.0.0.1:9333/cluster/status`.
+  Literal IPv4 is required here: localhost selected an unbound IPv6 listener.
+  The exact command passed inside the real SeaweedFS 3.75 image.
+- Stop a partially started Kafka producer before retrying known Kafka/network
+  failures. `test_failed_start_closes_producer_before_retry` verifies recovery.
+- Full real Kafka/PostgreSQL/S3 suite: 27 passed; full service Ruff now clean.
+  Remaining historical lint findings were corrected without suppressing rules.
+  Independent review approved. A fresh multi-process HTTP-to-transform smoke
+  was not completed: automatic approval review rejected transform startup with
+  `blocked by policy`. Unit/integration results do not replace that check.
+
 - Consumer decoded malformed UTF-8 outside its failure handling and assumed decoded
   JSON was an object. Regression-first tests cover malformed UTF-8/list/null DLQ routing.
 - Consumer committed source offsets even when DLQ publication failed. The failure

@@ -1,4 +1,7 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
+from aiokafka.errors import KafkaConnectionError
 
 from ingest_service.app.config import Settings
 from ingest_service.app.kafka.producer import EventKafkaProducer
@@ -43,3 +46,17 @@ async def test_publish_without_start_raises() -> None:
     prod = EventKafkaProducer(settings)
     with pytest.raises(RuntimeError, match="not started"):
         await prod.publish_raw_event(event_type="t", body={})
+
+
+@pytest.mark.asyncio
+async def test_failed_start_closes_producer_before_retry() -> None:
+    failed = AsyncMock()
+    failed.start.side_effect = KafkaConnectionError("synthetic outage")
+    recovered = AsyncMock()
+    producer = EventKafkaProducer(Settings())
+    with patch("ingest_service.app.kafka.producer.AIOKafkaProducer", side_effect=[failed, recovered]):
+        await producer.start(max_retries=2, backoff_base=0)
+        failed.stop.assert_awaited_once()
+        recovered.start.assert_awaited_once()
+        await producer.stop()
+        recovered.stop.assert_awaited_once()

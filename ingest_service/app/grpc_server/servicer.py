@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import grpc
 from google.protobuf.json_format import MessageToDict
@@ -9,10 +9,10 @@ from ingest_service.app.kafka.producer import EventKafkaProducer
 
 def _timestamp_to_iso(event: event_pb2.Event) -> str:
     if not event.HasField("timestamp"):
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
     t = event.timestamp
     sec = t.seconds + t.nanos / 1e9
-    return datetime.fromtimestamp(sec, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(sec, tz=UTC).isoformat()
 
 
 def _event_to_kafka_body(event: event_pb2.Event) -> dict:

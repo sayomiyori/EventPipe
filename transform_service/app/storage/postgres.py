@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -19,7 +19,7 @@ async def save_processed_event(
     enrichments: dict[str, Any],
     processed_at: datetime | None = None,
 ) -> ProcessedEvent:
-    ts = processed_at or datetime.now(timezone.utc)
+    ts = processed_at or datetime.now(UTC)
     result = await session.execute(select(ProcessedEvent).where(ProcessedEvent.event_id == event_id))
     existing = result.scalar_one_or_none()
     if existing:

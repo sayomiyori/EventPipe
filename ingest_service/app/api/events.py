@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -35,7 +35,7 @@ def _kafka_body(
     metadata: dict[str, str],
     ts: datetime | None = None,
 ) -> dict:
-    t = ts or datetime.now(timezone.utc)
+    t = ts or datetime.now(UTC)
     return {
         "event_id": event_id,
         "source": source,

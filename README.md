@@ -6,12 +6,23 @@
 [![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)](#)
 [![gRPC](https://img.shields.io/badge/gRPC-4285F4?logo=google&logoColor=white)](#)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](#)
-[![MinIO](https://img.shields.io/badge/MinIO-C72E49?logo=minio&logoColor=white)](#)
+[![S3](https://img.shields.io/badge/S3-SeaweedFS-blue)](#)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](#)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](#)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)](#)
 
 Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (validate/enrich/normalize) → PostgreSQL + SeaweedFS (S3-compatible, Apache 2.0)**, with Query API, Dead Letter Queue, Prometheus/Grafana monitoring, Docker Compose, and Kubernetes manifests.
+
+## Current verification
+
+On 2026-10-09, all 27 tests passed with real Kafka, PostgreSQL and S3; full Ruff
+checks and independent review passed. The main SeaweedFS healthcheck was repaired
+and verified inside its actual image. A fresh multi-process HTTP-to-transform
+smoke was blocked by local automatic approval review; it is not claimed passed.
+Historical screenshots and checks below do not replace current runtime evidence.
+
+Services still lack shared identity/tenant isolation. Keep this standalone stack
+private; public deployment and integration with NexusCore remain separate work.
 
 ## Architecture
 
@@ -26,7 +37,7 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
                                                      │       │
                                                      ▼       ▼
                                               ┌──────────┐ ┌────────┐
-                                              │PostgreSQL│ │ MinIO  │
+                                              │PostgreSQL│ │ S3     │
                                               │(results) │ │ (S3)   │
                                               └──────────┘ └────────┘
 
@@ -57,7 +68,7 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
 ### PostgreSQL — processed events
 ![PostgreSQL Events](docs/images/postgres-events.png)
 
-### MinIO — raw-events bucket
+### Historical MinIO screenshot (current Compose uses SeaweedFS)
 ![MinIO Bucket](docs/images/minio-bucket.png)
 
 ### Query Stats response
@@ -83,7 +94,7 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
 | Message broker | Apache Kafka (aiokafka), 3 partitions |
 | Transform | Python consumer, pipeline: validate → enrich → normalize |
 | Storage (processed) | PostgreSQL 16, SQLAlchemy 2 (asyncpg) |
-| Storage (raw) | MinIO (S3-compatible), bucket `raw-events` |
+| Storage (raw) | SeaweedFS (S3-compatible), bucket `raw-events` |
 | Dead Letter Queue | Kafka topic `events.dlq` |
 | Metrics | Prometheus + Grafana |
 | Deployment | Docker Compose, Kubernetes (Minikube) |
@@ -93,7 +104,7 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
 
 **Kafka over RabbitMQ** — EventPipe processes high-throughput event streams where ordering matters. Kafka's partitioned log with consumer groups gives replay capability and natural parallelism — Transform workers scale by partition count.
 
-**MinIO for raw storage, PostgreSQL for processed** — raw events are immutable blobs (write-once, read-rarely) → S3-compatible storage. Processed events need filtering, aggregation, joins → relational DB with JSONB.
+**S3-compatible raw storage, PostgreSQL for processed** — raw events are immutable blobs (write-once, read-rarely) → S3-compatible storage. Processed events need filtering, aggregation, joins → relational DB with JSONB.
 
 **Separate Ingest / Transform / Query services** — each has a different scaling profile: Ingest is CPU-light I/O-bound, Transform is CPU-heavy, Query is read-heavy. Independent scaling without affecting other services.
 
@@ -104,12 +115,12 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
 ## Quick Start
 
 ```bash
-# Full stack (Ingest :8013, Query :8020, MinIO :9001, Prometheus :9095, Grafana :3001)
+# Full stack (Ingest :8013, Query :8020, SeaweedFS S3 :8333, Prometheus :9095, Grafana :3001)
 docker compose up -d --build
 ```
 
 Default credentials:
-- **MinIO Console**: `http://localhost:9001` — `minio` / `minio12345`
+- **SeaweedFS S3**: `http://localhost:8333`; master status: `http://localhost:9333/cluster/status`. There is no MinIO console in this Compose profile.
 - **Grafana**: `http://localhost:3001` — `admin` / `admin`
 - **Prometheus**: `http://localhost:9095`
 
@@ -182,7 +193,7 @@ Full event details: payload, metadata, enrichments, s3_key.
 
 #### `GET /api/v1/events/{event_id}/raw`
 
-Redirect (307) to a pre-signed MinIO URL (15 min expiry). Downloads the raw JSON event file.
+Redirect (307) to a pre-signed S3 URL (15 min expiry). Downloads the raw JSON event file.
 
 #### `GET /api/v1/stats`
 
@@ -222,7 +233,7 @@ Health check.
 | `events_failed_total` | Counter | Events sent to DLQ |
 | `transform_duration_seconds` | Histogram | Full pipeline latency |
 | `kafka_consumer_lag` | Gauge | Consumer group lag |
-| `s3_upload_duration_seconds` | Histogram | MinIO upload latency |
+| `s3_upload_duration_seconds` | Histogram | S3 upload latency |
 
 ### Query Service
 

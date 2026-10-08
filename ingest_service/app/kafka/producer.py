@@ -5,6 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from aiokafka import AIOKafkaProducer
+from aiokafka.errors import KafkaError
 
 from ingest_service.app.config import Settings
 
@@ -31,7 +32,9 @@ class EventKafkaProducer:
                 await self._producer.start()
                 log.info("Kafka producer connected on attempt %d", attempt + 1)
                 return
-            except Exception as exc:
+            except (KafkaError, OSError, TimeoutError) as exc:
+                if self._producer is not None:
+                    await self._producer.stop()
                 wait = backoff_base * (2 ** attempt)
                 log.warning("Kafka not ready (attempt %d/%d): %s — retrying in %.0fs", attempt + 1, max_retries, exc, wait)
                 self._producer = None

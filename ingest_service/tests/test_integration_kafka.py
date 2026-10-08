@@ -1,10 +1,12 @@
 import asyncio
 import json
+import logging
 import os
 import uuid
 
 import pytest
 from aiokafka import AIOKafkaConsumer
+from aiokafka.errors import KafkaError
 from httpx import ASGITransport, AsyncClient
 
 from ingest_service.app.config import Settings
@@ -36,8 +38,8 @@ async def test_rest_to_kafka_json_roundtrip() -> None:
     except Exception as exc:  # noqa: BLE001 — broker discovery / network
         try:
             await consumer.stop()
-        except Exception:
-            pass
+        except (KafkaError, OSError, TimeoutError):
+            logging.getLogger(__name__).warning("Test consumer cleanup failed")
         pytest.skip(f"Kafka not reachable at {bootstrap}: {exc}")
 
     try:
@@ -77,7 +79,7 @@ async def test_rest_to_kafka_json_roundtrip() -> None:
         found = None
         for _ in range(60):
             batch = await consumer.getmany(timeout_ms=2000, max_records=20)
-            for _tp, records in batch.items():
+            for records in batch.values():
                 for rec in records:
                     v = rec.value
                     if isinstance(v, dict) and v.get("payload", {}).get("token") == unique:
