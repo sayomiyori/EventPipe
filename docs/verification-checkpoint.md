@@ -1,6 +1,58 @@
-# EventPipe verification checkpoint — 2026-10-04
+# EventPipe verification checkpoint — 2026-10-09
 
-Status: **Local ETL verified; full lint gate, independent review and public deployment are not ready.**
+Status: **Standalone local ETL, full test suite, lint, review and CI verified.
+Shared identity/tenant isolation and public deployment remain separate work.**
+
+## SeaweedFS CI and full runtime continuation — 2026-10-09
+
+The user applied the reviewed workflow after earlier automatic approval
+rejections. Commit `79ab8dd` replaces obsolete MinIO GitHub service containers
+with the existing `docker-compose.test.yml` Kafka/PostgreSQL/SeaweedFS setup.
+All tests run; a JUnit assertion rejects skips. Three Docker builds and
+unconditional cleanup remain enabled. No dependencies or application APIs changed.
+
+- Local suite: 27 passed in 13.51 seconds, zero skips.
+- Ruff, workflow YAML assertions and `git diff --check`: passed.
+- Fresh read-only adversarial review and scoped security pass: approved.
+- [GitHub run 37894123954](https://github.com/sayomiyori/EventPipe/actions/runs/37894123954):
+  success; 27 passed in 8.47 seconds, all three Docker builds and cleanup passed.
+- Local ingest/transform/query images rebuilt; all six healthchecked services
+  healthy, Zookeeper running, Kafka initialization exited successfully.
+- Full smoke passed twice; the second run took 6.60 seconds. This is a functional
+  smoke duration, not a load/capacity measurement.
+- The independent reviewer repeated the full smoke successfully (6.85 seconds),
+  confirmed the exact green Actions commit and approved the documentation.
+- All three built images passed assertions excluding `.env`, `.git` and `.venv`
+  under `/app`. Test containers and their network were removed with Compose
+  `down`; volumes and the separate NexusCore runtime were preserved.
+- Logs showed expected validation retries and failure from the deliberate invalid
+  DLQ probe, with no unexplained application errors in the inspected window.
+
+Commands from `D:/Programming/EventPipe`:
+
+```powershell
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml config --quiet
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml up -d --wait --wait-timeout 240 kafka postgres seaweedfs
+# Use the synthetic integration environment from .github/workflows/ci.yml.
+.venv/Scripts/python.exe -m pytest -q --junitxml=.pytest_cache/ci.xml
+.venv/Scripts/python.exe -c "import xml.etree.ElementTree as E; assert not E.parse('.pytest_cache/ci.xml').findall('.//skipped')"
+.venv/Scripts/python.exe -m ruff check ingest_service transform_service query_service scripts
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml build ingest transform query
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml build ingest
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml up -d --no-build --wait --wait-timeout 180 transform query
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml up -d --no-build --wait --wait-timeout 180 ingest
+.venv/Scripts/python.exe -m scripts.verify_eventpipe
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml ps
+gh run watch 37894123954 --repo sayomiyori/EventPipe --interval 15 --exit-status
+docker compose -p eventpipe-ci-check -f docker-compose.test.yml down
+```
+
+The first local ingest build hit a Debian mirror HTTP 503; a later attempt hit
+pip dependency resolution failure. An unchanged retry completed successfully.
+The tests use retained isolated volumes; no production data or live credentials
+are used. Earlier evidence below is historical and does not override this section.
+
+## Historical checkpoint — 2026-10-04
 
 ## Checks repeated after resume
 

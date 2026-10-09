@@ -15,10 +15,13 @@ Microservice ETL pipeline: **Ingest (REST + gRPC) → Kafka → Transform (valid
 
 ## Current verification
 
-On 2026-10-09, all 27 tests passed with real Kafka, PostgreSQL and S3; full Ruff
-checks and independent review passed. The main SeaweedFS healthcheck was repaired
-and verified inside its actual image. A fresh multi-process HTTP-to-transform
-smoke was blocked by local automatic approval review; it is not claimed passed.
+On 2026-10-09, all 27 tests passed with real Kafka, PostgreSQL and SeaweedFS S3;
+full Ruff checks and independent review passed. CI now reuses the test Compose
+and rejects skipped tests. [Run 37894123954](https://github.com/sayomiyori/EventPipe/actions/runs/37894123954)
+passed all tests and three Docker builds. The rebuilt local stack passed the
+complete REST/batch/gRPC-to-query smoke twice, including duplicate identity,
+raw S3 download, independent public-host SigV4 verification and real Kafka DLQ.
+The earlier local execution blockers are resolved for these checks.
 Historical screenshots and checks below do not replace current runtime evidence.
 
 Services still lack shared identity/tenant isolation. Keep this standalone stack

@@ -10,9 +10,17 @@
   failures. `test_failed_start_closes_producer_before_retry` verifies recovery.
 - Full real Kafka/PostgreSQL/S3 suite: 27 passed; full service Ruff now clean.
   Remaining historical lint findings were corrected without suppressing rules.
-  Independent review approved. A fresh multi-process HTTP-to-transform smoke
-  was not completed: automatic approval review rejected transform startup with
-  `blocked by policy`. Unit/integration results do not replace that check.
+  Independent review approved. An earlier multi-process smoke attempt was
+  rejected with `blocked by policy`; the continuation below completed it.
+- CI still used unavailable `minio/minio:latest` after the SeaweedFS migration.
+  The user applied the reviewed workflow replacement; commit `79ab8dd` reuses
+  the existing test Compose, runs all tests and rejects skipped tests.
+  GitHub run `37894123954` passed: 27 tests, three builds and cleanup.
+- Fresh local image builds encountered a Debian mirror HTTP 503 and then a pip
+  resolution failure. Repeating the unchanged builds succeeded; dependency
+  versions and Dockerfiles were not changed. The rebuilt stack passed the full
+  smoke twice. Expected validation/retry logs belonged to the deliberate DLQ
+  probe. See `verification-checkpoint.md` for commands and remaining boundaries.
 
 - Consumer decoded malformed UTF-8 outside its failure handling and assumed decoded
   JSON was an object. Regression-first tests cover malformed UTF-8/list/null DLQ routing.
