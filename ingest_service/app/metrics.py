@@ -4,7 +4,6 @@ from starlette.responses import Response
 events_ingested_total = Counter(
     "events_ingested_total",
     "Count of ingested events",
-    labelnames=("source", "event_type"),
 )
 
 ingest_duration_seconds = Histogram(

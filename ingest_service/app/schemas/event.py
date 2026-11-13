@@ -1,12 +1,13 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventIngest(BaseModel):
-    source: str = Field(..., min_length=1)
-    event_type: str = Field(..., min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(..., min_length=1, max_length=255)
+    event_type: str = Field(..., min_length=1, max_length=255)
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, str] = Field(default_factory=dict)
 
@@ -17,7 +18,8 @@ class EventIngestResponse(BaseModel):
 
 
 class BatchEventIngest(BaseModel):
-    events: list[EventIngest] = Field(..., min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    events: list[EventIngest] = Field(..., min_length=1, max_length=1000)
 
 
 class BatchEventIngestResponse(BaseModel):

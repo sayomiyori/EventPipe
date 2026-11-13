@@ -15,7 +15,8 @@ def _s3_client_kwargs(settings: Settings) -> dict:
         "aws_access_key_id": settings.s3_access_key,
         "aws_secret_access_key": settings.s3_secret_key,
         "region_name": settings.s3_region,
-        "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        "config": Config(signature_version="s3v4", s3={"addressing_style": "path"},
+                         connect_timeout=2, read_timeout=5, retries={"max_attempts": 1, "mode": "standard"}),
     }
 
 

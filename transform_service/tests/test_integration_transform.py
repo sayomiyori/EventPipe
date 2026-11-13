@@ -10,6 +10,8 @@ import pytest
 async def test_kafka_to_minio_and_postgres(integration_env) -> None:
     import structlog
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
     from botocore.config import Config
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -103,6 +105,12 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
     assert msg is not None
 
     engine = create_engine(settings)
+    async with engine.begin() as connection:
+        def migrate(sync_connection):
+            config = AlembicConfig("alembic.ini")
+            config.attributes["connection"] = sync_connection
+            command.upgrade(config, "head")
+        await connection.run_sync(migrate)
     await init_db(engine)
     session_factory: async_sessionmaker[AsyncSession] = create_session_factory(engine)
     s3_session = create_s3_session()

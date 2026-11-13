@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"
     api_port: int = 8020
+    platform_mode: bool = False
+    auth_url: str = ""
 
     database_url: str = "postgresql+asyncpg://eventpipe:eventpipe@localhost:5434/eventpipe"
 

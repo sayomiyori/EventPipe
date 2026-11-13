@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,10 +24,12 @@ class Settings(BaseSettings):
     s3_bucket_raw: str = "raw-events"
     s3_region: str = "us-east-1"
 
-    max_retries: int = 3
-    retry_backoff_base_seconds: float = 0.5
+    max_retries: int = Field(3, ge=1, le=10)
+    retry_backoff_base_seconds: float = Field(0.5, ge=0, le=60)
 
     geo_ip_timeout_seconds: float = 2.0
+    geo_ip_enabled: bool = False
+    platform_mode: bool = False
     health_host: str = "0.0.0.0"
     health_port: int = 9101
 
