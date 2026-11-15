@@ -90,7 +90,7 @@ services:
     build: {context: ., dockerfile: transform_service/Dockerfile}
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
-      TRANSFORM_DATABASE_URL: postgresql+asyncpg://eventpipe:local-test-only@postgres:5432/eventpipe_test
+      TRANSFORM_DATABASE_URL: ${TRANSFORM_DATABASE_URL:?Set TRANSFORM_DATABASE_URL}
     depends_on:
       postgres: {condition: service_healthy}
   query:

@@ -170,7 +170,7 @@ services:
       dockerfile: transform_service/Dockerfile
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
-      TRANSFORM_DATABASE_URL: postgresql+asyncpg://eventpipe:eventpipe@postgres:5432/eventpipe
+      TRANSFORM_DATABASE_URL: ${TRANSFORM_DATABASE_URL:?Set TRANSFORM_DATABASE_URL}
     depends_on:
       postgres: {condition: service_healthy}
 
