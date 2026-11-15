@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     kafka_topic_dlq: str = "events.dlq"
     kafka_group_id: str = "transform-workers"
 
-    database_url: str = "postgresql+asyncpg://eventpipe:eventpipe@localhost:5432/eventpipe"
+    database_url: str = "postgresql+asyncpg://eventpipe@localhost:5432/eventpipe"
 
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "minio"

@@ -37,7 +37,7 @@ async def test_kafka_to_minio_and_postgres(integration_env) -> None:
         kafka_group_id="transform-workers",
         database_url=os.environ.get(
             "TRANSFORM_DATABASE_URL",
-            "postgresql+asyncpg://eventpipe:eventpipe@localhost:5432/eventpipe",
+            "postgresql+asyncpg://eventpipe@localhost:5432/eventpipe",
         ),
         s3_endpoint_url=os.environ.get("TRANSFORM_S3_ENDPOINT_URL", "http://localhost:9000"),
         s3_access_key=os.environ.get("TRANSFORM_S3_ACCESS_KEY", "minio"),
