@@ -55,11 +55,12 @@ class EventKafkaProducer:
     ) -> None:
         if not self._producer:
             raise RuntimeError("Kafka producer is not started")
-        await self._producer.send_and_wait(
-            self._settings.kafka_topic_raw,
-            key=event_type,
-            value=body,
-        )
+        async with asyncio.timeout(5):
+            await self._producer.send_and_wait(
+                self._settings.kafka_topic_raw,
+                key=event_type,
+                value=body,
+            )
 
     @staticmethod
     def new_event_id() -> str:

@@ -4,8 +4,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import uvicorn
+from aiokafka.errors import KafkaError
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
+from eventpipe.body_limit import IngestBodyLimit
 from ingest_service.app.api.events import router
 from ingest_service.app.config import get_settings
 from ingest_service.app.grpc_server.server import serve_grpc
@@ -45,6 +48,13 @@ def create_app() -> FastAPI:
         title="EventPipe Ingest",
         lifespan=lifespan,
     )
+    application.add_middleware(IngestBodyLimit)
+    async def unavailable(request, exc):
+        return JSONResponse({"detail": "event broker unavailable"}, status_code=503)
+
+    application.add_exception_handler(KafkaError, unavailable)
+    application.add_exception_handler(TimeoutError, unavailable)
+    application.add_exception_handler(OSError, unavailable)
     application.include_router(router, prefix="/api/v1")
     application.add_api_route("/metrics", lambda: metrics_response(), methods=["GET"])
     application.add_api_route("/health", lambda: {"status": "ok"}, methods=["GET"])

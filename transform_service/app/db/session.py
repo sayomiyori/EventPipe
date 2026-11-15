@@ -1,9 +1,9 @@
 from collections.abc import AsyncIterator
 
+from alembic.migration import MigrationContext
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from transform_service.app.config import Settings
-from transform_service.app.models.processed_event import Base
 
 
 def create_engine(settings: Settings):
@@ -19,8 +19,10 @@ def create_session_factory(engine):
 
 
 async def init_db(engine) -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    async with engine.connect() as conn:
+        revision = await conn.run_sync(lambda connection: MigrationContext.configure(connection).get_current_revision())
+    if revision != "002_tenant_boundary":
+        raise RuntimeError("Database migration required: run alembic upgrade head explicitly")
 
 
 async def get_session(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
