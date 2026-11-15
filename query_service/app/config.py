@@ -8,8 +8,10 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"
     api_port: int = 8020
+    platform_mode: bool = False
+    auth_url: str = ""
 
-    database_url: str = "postgresql+asyncpg://eventpipe:eventpipe@localhost:5434/eventpipe"
+    database_url: str = "postgresql+asyncpg://eventpipe@localhost:5434/eventpipe"
 
     s3_endpoint_url: str = "http://localhost:9000"
     s3_public_url: str = "http://localhost:9000"

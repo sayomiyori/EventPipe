@@ -125,7 +125,8 @@ async def main():
             found = False
             while time.monotonic() < deadline and not found:
                 messages = await consumer.getmany(timeout_ms=1000)
-                found = any(json.loads(m.value).get("original", {}).get("verification_probe") == probe
+                digest = hashlib.sha256(json.dumps({"verification_probe": probe}).encode()).hexdigest()
+                found = any(json.loads(m.value).get("original", {}).get("record_sha256") == digest
                             for batch in messages.values() for m in batch)
             assert found, "Invalid event did not reach real Kafka DLQ"
         finally:

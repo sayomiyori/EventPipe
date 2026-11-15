@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from ipaddress import ip_address
 from typing import Any
 
 import httpx
@@ -31,7 +32,10 @@ async def lookup_geo_ip(
     client: httpx.AsyncClient,
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    url = f"http://ip-api.com/json/{ip}"
+    parsed = ip_address(ip)
+    if not parsed.is_global:
+        raise ValueError("geo enrichment requires a public IP")
+    url = f"https://ip-api.com/json/{parsed}"
     resp = await client.get(url, params={"fields": "status,country,countryCode,city"}, timeout=timeout_seconds)
     resp.raise_for_status()
     data = resp.json()
@@ -62,13 +66,13 @@ async def enrich(
         enrichments["geo"] = None
         return enrichments
 
-    if http_client is None:
+    if http_client is None or not settings.geo_ip_enabled:
         enrichments["geo"] = {"skipped": True, "ip": ip}
         return enrichments
 
     try:
         enrichments["geo"] = await lookup_geo_ip(ip, http_client, settings.geo_ip_timeout_seconds)
     except Exception as exc:  # noqa: BLE001 — enrichment is best-effort
-        enrichments["geo"] = {"error": str(exc), "ip": ip}
+        enrichments["geo"] = {"error": type(exc).__name__, "ip": ip}
 
     return enrichments

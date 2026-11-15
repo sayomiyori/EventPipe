@@ -24,7 +24,7 @@ async def test_run_pipeline_order() -> None:
 
 @pytest.mark.asyncio
 async def test_run_pipeline_with_mock_geo() -> None:
-    settings = Settings()
+    settings = Settings(geo_ip_enabled=True)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

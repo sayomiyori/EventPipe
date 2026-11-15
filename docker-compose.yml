@@ -5,15 +5,16 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "2181:2181"
+      - "127.0.0.1:2181:2181"
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    restart: on-failure:3
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
-      - "29092:29092"
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:29092:29092"
     healthcheck:
       test:
         [
@@ -55,7 +56,7 @@ services:
       POSTGRES_PASSWORD: eventpipe
       POSTGRES_DB: eventpipe
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U eventpipe -d eventpipe"]
       interval: 5s
@@ -67,10 +68,10 @@ services:
     image: chrislusf/seaweedfs:3.75
     command: server -dir=/data -s3 -filer -ip=seaweedfs
     ports:
-      - "9333:9333" #Master
-      - "8333:8333" #S3 API
-      - "8888:8888" #Filer
-      - "8081:8080" #Volume server
+      - "127.0.0.1:9333:9333" #Master
+      - "127.0.0.1:8333:8333" #S3 API
+      - "127.0.0.1:8888:8888" #Filer
+      - "127.0.0.1:8081:8080" #Volume server
     environment:
       - AWS_ACCESS_KEY_ID=some_key
       - AWS_SECRET_ACCESS_KEY=some_secret
@@ -117,8 +118,8 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8013:8013"
-      - "50051:50051"
+      - "127.0.0.1:8013:8013"
+      - "127.0.0.1:50051:50051"
     environment:
       EVENTPIPE_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       EVENTPIPE_KAFKA_TOPIC_RAW: events.raw
@@ -126,6 +127,8 @@ services:
       EVENTPIPE_API_PORT: 8013
       EVENTPIPE_GRPC_HOST: 0.0.0.0
       EVENTPIPE_GRPC_PORT: 50051
+      EVENTPIPE_PLATFORM_MODE: ${EVENTPIPE_PLATFORM_MODE:-false}
+      EVENTPIPE_AUTH_URL: ${EVENTPIPE_AUTH_URL:-}
     labels:
       - "prometheus.job=ingest_service"
 
@@ -155,8 +158,21 @@ services:
       TRANSFORM_S3_REGION: us-east-1
       TRANSFORM_HEALTH_HOST: 0.0.0.0
       TRANSFORM_HEALTH_PORT: 9101
+      TRANSFORM_PLATFORM_MODE: ${TRANSFORM_PLATFORM_MODE:-false}
+      TRANSFORM_GEO_IP_ENABLED: ${TRANSFORM_GEO_IP_ENABLED:-false}
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"
+
+  migrate:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: transform_service/Dockerfile
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      TRANSFORM_DATABASE_URL: ${TRANSFORM_DATABASE_URL:?Set TRANSFORM_DATABASE_URL}
+    depends_on:
+      postgres: {condition: service_healthy}
 
   query_service:
     build:
@@ -170,7 +186,7 @@ services:
       kafka:
         condition: service_healthy
     ports:
-      - "8020:8020"
+      - "127.0.0.1:8020:8020"
     environment:
       QUERY_API_HOST: 0.0.0.0
       QUERY_API_PORT: 8020
@@ -183,6 +199,8 @@ services:
       QUERY_S3_REGION: us-east-1
       QUERY_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       QUERY_KAFKA_TOPIC_DLQ: events.dlq
+      QUERY_PLATFORM_MODE: ${QUERY_PLATFORM_MODE:-false}
+      QUERY_AUTH_URL: ${QUERY_AUTH_URL:-}
 
   prometheus:
     image: prom/prometheus:v2.53.0
@@ -190,7 +208,7 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9095:9090"
+      - "127.0.0.1:9095:9090"
     depends_on:
       - ingest_service
       - transform_service
@@ -199,7 +217,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.0
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:

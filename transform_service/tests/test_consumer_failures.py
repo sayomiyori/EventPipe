@@ -1,7 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import structlog
@@ -69,4 +69,49 @@ async def test_successful_dlq_delivery_commits_source_offset(monkeypatch):
     await run_consumer_loop(Settings(max_retries=1), None, stop)
     assert consumer.commit.await_count == 1
     body = producer.send_and_wait.call_args.kwargs["value"]
-    assert body["original"] == {"source": "missing-required-fields"}
+    assert body["original"]["offset"] == 5
+    assert body["original"]["partition"] == 0
+    assert "missing-required-fields" not in json.dumps(body)
+    assert "raw" not in body["original"]
+
+
+@pytest.mark.asyncio
+async def test_storage_outage_escapes_without_dlq_or_sensitive_logs(monkeypatch):
+    raw = {"event_id": "e", "source": "s", "event_type": "t", "timestamp": "2026-10-11T00:00:00Z",
+           "payload": {"password": "sensitive-fixture-only"}}
+    session = SimpleNamespace(execute=AsyncMock(side_effect=OSError("sensitive-fixture-only")))
+
+    class Context:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *args):
+            pass
+
+    producer = SimpleNamespace(send_and_wait=AsyncMock())
+    log = MagicMock()
+    with pytest.raises(RuntimeError, match="infrastructure unavailable"):
+        await process_kafka_message(
+            SimpleNamespace(value=json.dumps(raw).encode(), key=b"sensitive-fixture-only",
+                            topic="events.raw", partition=0, offset=0),
+            settings=Settings(max_retries=1), session_factory=Context, s3_session=None,
+            http_client=None, dlq_producer=producer, log=log,
+        )
+    assert producer.send_and_wait.await_count == 0
+    assert "sensitive-fixture-only" not in str(log.mock_calls)
+
+
+@pytest.mark.asyncio
+async def test_validation_dlq_has_no_original_secrets_or_kafka_key():
+    raw = {"event_id": "sensitive-fixture-only", "source": "",
+           "payload": {"token": "sensitive-fixture-only"}}
+    producer = SimpleNamespace(send_and_wait=AsyncMock())
+    log = MagicMock()
+    await process_kafka_message(
+        SimpleNamespace(value=json.dumps(raw).encode(), key=b"sensitive-fixture-only",
+                        topic="events.raw", partition=0, offset=1),
+        settings=Settings(max_retries=1), session_factory=None, s3_session=None,
+        http_client=None, dlq_producer=producer, log=log,
+    )
+    assert "sensitive-fixture-only" not in json.dumps(producer.send_and_wait.call_args.kwargs)
+    assert "sensitive-fixture-only" not in str(log.mock_calls)

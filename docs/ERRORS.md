@@ -1,5 +1,34 @@
 # Verified defects — 2026-10-03
 
+## 2026-10-12: Images retained root processes and an outdated installer
+
+Actual ingest/query/transform image inspection found UID 0 and pip 25.0.1, the
+same version rejected by the current package advisory audit. Upgrade pip before
+installing existing requirements and run applications/migrations as UID 10001.
+Build-time protobuf generation stays before USER; source files are read-only to
+the application user. Runtime storage remains PostgreSQL/S3, with no ownership
+changes to existing infrastructure volumes. Verify actual image inventories,
+startup, migration and real pipeline/recovery after rebuilding.
+
+## 2026-10-12: Kafka startup collided with a stale ZooKeeper session
+
+After the shared runtime interruption, the preserved test broker exited with
+NodeExistsException while ZooKeeper still held the previous ephemeral broker
+registration. OOMKilled was false. ZooKeeper expired that session normally;
+the subsequent broker start succeeded without deleting data. Set the existing
+Kafka service to bounded on-failure:3 restarts in standalone/test Compose.
+Readiness is still required before tests or application startup; this does not
+hide permanent configuration errors or restart a deliberately stopped broker.
+
+## 2026-10-12: Explicit schema startup procedure
+
+The previous Quick Start bypassed the new required revision check. Documented
+startup now validates Compose, starts infrastructure, explicitly upgrades an
+empty database through the tools-profile migrate service and starts applications
+only after success. Existing unversioned schemas require the checked adoption
+script before upgrade; automatic or blind stamping is not supported. Historical
+verification remains dated evidence, not a claim of the current runtime rollout.
+
 ## 2026-10-09: Startup and current checks
 
 - Main Compose SeaweedFS healthcheck invoked unavailable curl against a 404
