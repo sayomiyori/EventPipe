@@ -1,0 +1,18 @@
+# Verification-only fixture; no root runtime or public identity service.
+services:
+  identity:
+    image: ${EVENTPIPE_TEST_PROJECT:?set unique isolated test project}-ingest
+    command: ["python", "-m", "uvicorn", "ingest_service.tests.identity_stub:app", "--host", "0.0.0.0", "--port", "18000"]
+  ingest:
+    environment:
+      EVENTPIPE_PLATFORM_MODE: "true"
+      EVENTPIPE_AUTH_URL: http://identity:18000
+    depends_on: [identity]
+  query:
+    environment:
+      QUERY_PLATFORM_MODE: "true"
+      QUERY_AUTH_URL: http://identity:18000
+  transform:
+    environment:
+      TRANSFORM_PLATFORM_MODE: "true"
+    volumes: ["./scripts:/verification:ro"]

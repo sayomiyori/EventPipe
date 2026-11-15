@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     grpc_port: int = 50051
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    platform_mode: bool = False
+    auth_url: str = ""
 
 
 @lru_cache

@@ -7,9 +7,9 @@ from ingest_service.app.kafka.producer import EventKafkaProducer
 
 
 async def serve_grpc(settings: Settings, producer: EventKafkaProducer) -> aio.Server:
-    server = aio.server()
+    server = aio.server(options=[("grpc.max_receive_message_length", 1024 * 1024)])
     event_pb2_grpc.add_EventServiceServicer_to_server(
-        EventServiceServicer(producer),
+        EventServiceServicer(producer, settings),
         server,
     )
     addr = f"{settings.grpc_host}:{settings.grpc_port}"

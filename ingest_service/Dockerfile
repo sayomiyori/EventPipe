@@ -7,10 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY ingest_service/requirements.txt /app/ingest_service/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r /app/ingest_service/requirements.txt
 
 COPY proto /app/proto
 COPY ingest_service /app/ingest_service
+COPY eventpipe /app/eventpipe
 COPY ingest_service/pytest.ini /app/pytest.ini
 
 RUN PROTO_INC=$(python -c "from pathlib import Path; import google.protobuf; print(Path(google.protobuf.__file__).resolve().parent.parent.parent)") && \
@@ -25,6 +27,9 @@ RUN PROTO_INC=$(python -c "from pathlib import Path; import google.protobuf; pri
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 
 EXPOSE 8000 50051
 

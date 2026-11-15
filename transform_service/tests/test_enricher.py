@@ -59,7 +59,7 @@ async def test_lookup_geo_ip_mock_transport() -> None:
 
 @pytest.mark.asyncio
 async def test_enrich_with_geo_client() -> None:
-    settings = Settings()
+    settings = Settings(geo_ip_enabled=True)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -79,3 +79,18 @@ async def test_enrich_with_geo_client() -> None:
         }
         out = await enrich(event, settings=settings, http_client=client)
     assert out["geo"]["country"] == "Narnia"
+
+
+@pytest.mark.asyncio
+async def test_geo_disabled_and_nonpublic_ips_never_call_provider():
+    def handler(request):
+        raise AssertionError("live provider call")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        event = {"payload": {"client_ip": "8.8.8.8"}}
+        out = await enrich(event, settings=Settings(), http_client=client)
+        assert out["geo"]["skipped"] is True
+        for ip in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "::1", "8.8.8.8/../../private"):
+            event["payload"]["client_ip"] = ip
+            out = await enrich(event, settings=Settings(geo_ip_enabled=True), http_client=client)
+            assert out["geo"]["error"] == "ValueError"

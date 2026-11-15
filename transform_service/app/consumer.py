@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import aioboto3
 import httpx
@@ -9,6 +11,7 @@ import structlog
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 from aiokafka.structs import OffsetAndMetadata, TopicPartition
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from transform_service.app.config import Settings
@@ -20,7 +23,11 @@ from transform_service.app.metrics import (
     transform_duration_seconds,
 )
 from transform_service.app.pipeline.pipeline import run_pipeline
-from transform_service.app.storage.postgres import save_processed_event
+from transform_service.app.storage.postgres import (
+    get_by_event_id,
+    save_failed_event,
+    save_processed_event,
+)
 from transform_service.app.storage.s3 import create_s3_session, upload_raw_json
 
 
@@ -48,14 +55,16 @@ async def _with_retries(
         try:
             await factory()
             return
+        except (ValidationError, ValueError, TypeError):
+            raise
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             log.warning(
                 "transform_retry",
-                event_id=event_id,
+                event_ref=hashlib.sha256(event_id.encode()).hexdigest(),
                 attempt=attempt + 1,
                 max_retries=max_retries,
-                error=str(exc),
+                error=type(exc).__name__,
             )
             if attempt < max_retries - 1:
                 await asyncio.sleep(backoff_base * (2**attempt))
@@ -71,11 +80,8 @@ async def publish_dlq(
     original: dict[str, Any],
     kafka_key: str | None,
 ) -> None:
-    body = {
-        "error": error,
-        "original": original,
-    }
-    key_str = kafka_key or str(original.get("event_type") or "unknown")
+    body = {"error": error, "original": original}
+    key_str = "invalid-event"
     await producer.send_and_wait(
         settings.kafka_topic_dlq,
         key=key_str,
@@ -96,6 +102,19 @@ async def process_kafka_message(
     raw_bytes = msg.value
     raw_text = raw_bytes.decode("utf-8", errors="replace") if isinstance(raw_bytes, (bytes, bytearray)) else str(raw_bytes)
     kafka_key = msg.key.decode("utf-8", errors="replace") if msg.key else None
+    record_sha256 = hashlib.sha256(bytes(raw_bytes) if isinstance(raw_bytes, (bytes, bytearray)) else raw_text.encode("utf-8")).hexdigest()
+
+    async def dead_letter(error: str, tenant_id: UUID | None = None) -> None:
+        diagnostic = {
+            "topic": msg.topic, "partition": msg.partition, "offset": msg.offset,
+            "tenant_id": tenant_id, "error": error, "record_sha256": record_sha256,
+        }
+        await publish_dlq(dlq_producer, settings, error=error, original={
+            **diagnostic, "tenant_id": str(tenant_id) if tenant_id else None,
+        }, kafka_key=kafka_key)
+        if session_factory is not None:
+            async with session_factory() as session:
+                await save_failed_event(session, diagnostic)
     try:
         if isinstance(raw_bytes, (bytes, bytearray)):
             raw_text = raw_bytes.decode("utf-8")
@@ -104,17 +123,20 @@ async def process_kafka_message(
             raise TypeError("event must be a JSON object")
     except (UnicodeDecodeError, ValueError, TypeError) as exc:
         events_failed_total.inc()
-        log.error("invalid_json", error=str(exc))
-        await publish_dlq(
-            dlq_producer,
-            settings,
-            error=f"json_decode:{exc}",
-            original={"raw": raw_text[:8000]},
-            kafka_key=kafka_key,
-        )
+        log.error("invalid_json", error=type(exc).__name__, record_sha256=record_sha256)
+        await dead_letter(type(exc).__name__)
         return
 
     event_id = str(raw_dict.get("event_id", "unknown"))
+    tenant_id = None
+    try:
+        if raw_dict.get("tenant_id") is not None:
+            tenant_id = UUID(str(raw_dict["tenant_id"]))
+        if settings.platform_mode and tenant_id is None:
+            raise ValueError("missing tenant context")
+    except ValueError:
+        await dead_letter("InvalidTenantContext")
+        return
 
     async def _once() -> None:
         with transform_duration_seconds.time():
@@ -123,10 +145,19 @@ async def process_kafka_message(
                 settings=settings,
                 http_client=http_client,
             )
+            async with session_factory() as session:
+                existing = await get_by_event_id(session, event_id)
+                if existing is not None:
+                    if existing.tenant_id != tenant_id or (tenant_id and existing.raw_sha256 != record_sha256):
+                        raise ValueError("event identity conflict")
+                    if existing.raw_sha256 == record_sha256:
+                        return
             ts = str(raw_dict.get("timestamp", ""))
             date_prefix = _parse_date_prefix(ts)
             eid = normalized["event_id"]
-            s3_key = f"{date_prefix}/{eid}.json"
+            s3_key = f"{date_prefix}/{record_sha256}/{eid}.json"
+            if tenant_id:
+                s3_key = f"tenants/{tenant_id}/{s3_key}"
             with s3_upload_duration_seconds.time():
                 await upload_raw_json(
                     s3_session,
@@ -144,6 +175,8 @@ async def process_kafka_message(
                     metadata=normalized.get("metadata") or {},
                     s3_key=s3_key,
                     enrichments=enrichments,
+                    tenant_id=tenant_id,
+                    raw_sha256=record_sha256,
                 )
 
     try:
@@ -155,16 +188,14 @@ async def process_kafka_message(
             event_id=event_id,
         )
         events_processed_total.inc()
-    except Exception as exc:
+    except (ValidationError, ValueError, TypeError) as exc:
         events_failed_total.inc()
-        log.exception("transform_failed", event_id=event_id, error=str(exc))
-        await publish_dlq(
-            dlq_producer,
-            settings,
-            error=str(exc),
-            original=raw_dict,
-            kafka_key=kafka_key,
-        )
+        log.error("transform_failed", record_sha256=record_sha256, error=type(exc).__name__)
+        await dead_letter(type(exc).__name__, tenant_id)
+    except Exception as exc:  # noqa: BLE001 — sanitize unknown infrastructure failures before exit
+        # Infrastructure failures must replay from the uncommitted source offset.
+        log.error("transform_unavailable", record_sha256=record_sha256, error=type(exc).__name__)
+        raise RuntimeError("transform infrastructure unavailable") from None
 
 
 async def commit_message(consumer: AIOKafkaConsumer, msg) -> None:
@@ -201,14 +232,15 @@ async def run_consumer_loop(
                 return
             except (KafkaError, OSError, TimeoutError) as exc:
                 wait = backoff_base * (2 ** attempt)
-                log.warning("kafka_not_ready", client=name, attempt=attempt + 1, max_retries=max_retries, error=str(exc), retry_in=wait)
+                await client.stop()
+                log.warning("kafka_not_ready", client=name, attempt=attempt + 1, max_retries=max_retries, error=type(exc).__name__, retry_in=wait)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
         raise RuntimeError(f"Could not connect {name} to Kafka after {max_retries} attempts")
 
-    await _start_with_retry(consumer, "consumer")
-    await _start_with_retry(dlq_producer, "dlq_producer")
     try:
+        await _start_with_retry(consumer, "consumer")
+        await _start_with_retry(dlq_producer, "dlq_producer")
         async with httpx.AsyncClient() as http_client:
             while not stop_event.is_set():
                 result = await consumer.getmany(timeout_ms=1000, max_records=20)

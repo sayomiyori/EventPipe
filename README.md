@@ -24,8 +24,14 @@ raw S3 download, independent public-host SigV4 verification and real Kafka DLQ.
 The earlier local execution blockers are resolved for these checks.
 Historical screenshots and checks below do not replace current runtime evidence.
 
-Services still lack shared identity/tenant isolation. Keep this standalone stack
-private; public deployment and integration with NexusCore remain separate work.
+The local hardening source adds opt-in online AuthFortress authorization and
+tenant scope for REST/gRPC admission, Kafka/raw storage, PostgreSQL and Query.
+Legacy NULL records remain standalone. See `specs/local-hardening.md` and the
+explicit schema procedure below. Public deployment and NexusCore runtime
+integration remain separate; source verification does not activate the platform.
+
+Application and migration images run as UID 10001. Protobuf generation and package
+installation happen during the build; runtime records remain in PostgreSQL/S3.
 
 ## Architecture
 
@@ -118,9 +124,48 @@ private; public deployment and integration with NexusCore remain separate work.
 ## Quick Start
 
 ```bash
-# Full stack (Ingest :8013, Query :8020, SeaweedFS S3 :8333, Prometheus :9095, Grafana :3001)
-docker compose up -d --build
+# Validate configuration without printing secrets; prepare infrastructure first.
+docker compose config --quiet
+docker compose up -d postgres kafka-init seaweedfs
+# Fresh database only: an unexpected existing schema fails closed.
+docker compose --profile tools run --rm --build migrate
+# Start applications only after migration succeeds.
+docker compose up -d --build ingest_service transform_service query_service
+# Optional local monitoring.
+docker compose up -d prometheus grafana
 ```
+
+For a previous unversioned database, first stop ingest/transform/query, create a
+backup and rehearse restoration. Then explicitly run
+`docker compose --profile tools run --rm --build migrate python -m scripts.adopt_legacy_schema`.
+The adoption tool accepts only the exact known legacy schema, writes its baseline
+revision and preserves rows. Unexpected columns, constraints, indexes, objects or
+an existing revision are rejected. Never use a blind Alembic stamp to bypass this
+check. Next run `docker compose --profile tools run --rm migrate` and restart the
+applications. Forward revision `002_tenant_boundary` adds nullable tenant scope
+and durable tenant failure diagnostics; historical rows remain unassigned. Downgrades remove new
+scope/state and are for disposable rehearsals only.
+
+To enable tenant mode, set all three of `EVENTPIPE_PLATFORM_MODE`,
+`TRANSFORM_PLATFORM_MODE` and `QUERY_PLATFORM_MODE` to true, with fixed
+`EVENTPIPE_AUTH_URL` and `QUERY_AUTH_URL` pointing to AuthFortress. REST requires
+`Authorization: Bearer ...` and `X-Tenant-ID`; gRPC uses `authorization` and
+`x-tenant-id` metadata. Every tenant selector is verified online: reads use
+`tenant.read`, admission uses `tenant.manage`; no positive auth cache exists.
+Invalid/revoked identity is 401, foreign membership 404, insufficient permission
+403 and identity outage 503 (corresponding gRPC statuses). Platform raw access is
+an authenticated proxy; no unscoped presigned raw URL is issued. Operational
+process metrics remain unscoped on loopback; they are not tenant usage APIs.
+Standalone mode preserves the legacy API.
+
+Geo-IP enrichment defaults off (`TRANSFORM_GEO_IP_ENABLED=false`) to avoid an
+implicit third-party call. Invalid-event diagnostics contain static validation
+codes instead of raw input. PostgreSQL/S3 failures leave the source Kafka offset
+uncommitted; restart replays that event. A lost acknowledgement can still cause
+duplicate effects; no exactly-once guarantee is made. Infrastructure ports bind
+to loopback; Kafka/S3 credentials remain a trusted local boundary. Do not expose
+the default Compose credentials or enable real external traffic as part of this
+local verification procedure.
 
 Default credentials:
 - **SeaweedFS S3**: `http://localhost:8333`; master status: `http://localhost:9333/cluster/status`. There is no MinIO console in this Compose profile.
